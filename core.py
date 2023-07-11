@@ -48,15 +48,15 @@ def is_constant(term: Term) -> bool:
 
 
 def get_max_predicate_length(domain: Domain) -> int:
-    return max(len(predicate.name) for predicate in domain.predicates)
+    return max([len(predicate.name) for predicate in domain.predicates] + [0])
 
 
 def get_max_type_length(domain: Domain) -> int:
-    return max(len(object_type) for object_type in domain.types)
+    return max([len(object_type) for object_type in domain.types] + [0])
 
 
 def get_max_parameter_length(action: Action) -> int:
-    return max(len(parameter.name) for parameter in action.parameters)
+    return max([len(parameter.name) for parameter in action.parameters] + [0])
 
 
 def remove_negation_from_precondition(
@@ -89,7 +89,7 @@ def add_negated_predicates_to_effect(
     match formula:
         case Not(argument=Predicate(name=predicate, terms=terms)):
             if predicate in negated_predicate_map:
-                return formula & Predicate(negated_predicate_map[predicate][0], *terms)
+                return AndEffect(formula, Predicate(negated_predicate_map[predicate][0], *terms))
             else:
                 return formula
         case UnaryOp(argument=subformula):
@@ -109,7 +109,7 @@ def add_negated_predicates_to_effect(
             return AndEffect(*elements)
         case Predicate(name=predicate, terms=terms):
             if predicate in negated_predicate_map:
-                return formula & ~Predicate(negated_predicate_map[predicate][0], *terms)
+                return AndEffect(formula, ~Predicate(negated_predicate_map[predicate][0], *terms))
             else:
                 return formula
 
