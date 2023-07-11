@@ -15,7 +15,10 @@ It should be noted that the CLI of Stripper doesn't work with domain-problem pai
 
 Instead Stripper simply accepts a directory and simplifies all of the files in that directory, making sure to match the right problem to the right domainm using the data in the files (making working with pairs again unneccessary).
 
-# CLI
+## Requirements
+Stripper requires several modern Python features, such as pattern matching, and type hints. It was been successfully tested on Python 3.11.4, however your mileage may very. To use it, one must install `pddl`, `click` and `tqdm`.
+
+## CLI
 To invoke Stripper, simply run the python script like so:
 ```
 python __main__.py <DIRECTORY>
