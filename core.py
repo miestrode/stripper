@@ -2,11 +2,11 @@ import glob
 import os
 from collections import defaultdict
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Callable
 
 import click
 import pddl
+import tqdm
 from pddl import formatter, logic
 from pddl.custom_types import name
 from pddl.logic import Predicate
@@ -95,9 +95,18 @@ def add_negated_predicates_to_effect(
         case UnaryOp(argument=subformula):
             return type(formula)(add_negated_predicates_to_effect(subformula, negated_predicate_map))
         case AndEffect(operands=formulas):
-            return AndEffect(
-                *[add_negated_predicates_to_effect(formula, negated_predicate_map) for formula in formulas]
-            )
+            formulas = [add_negated_predicates_to_effect(formula, negated_predicate_map) for formula in formulas]
+            elements = []
+
+            for formula in formulas:
+                match formula:
+                    case AndEffect(operands=formulas):
+                        for formula in formulas:
+                            elements.append(formula)
+                    case _:
+                        elements.append(formula)
+
+            return AndEffect(*elements)
         case Predicate(name=predicate, terms=terms):
             if predicate in negated_predicate_map:
                 return formula & ~Predicate(negated_predicate_map[predicate][0], *terms)
@@ -331,24 +340,11 @@ def strip_problem(problem: Problem, metadata: DomainMetadata):
     remove_problem_negative_preconditions(problem, metadata.negated_predicate_map)
 
 
-def strip_group(files: list[Path]):
-    """
-    Takes a list of PDDL files using only STRIPS requirements and turns them into files
-    using pure STRIPS, in-place (in the file-system directly). STRIPS requirements are
-    defined by the "pddl" module from PyPI.
-
-    Args:
-        files: The list of PDDL files to transform into pure STRIPS files
-
-    Raises:
-        NotImplementedError: If the files aren't using only STRIPS requirements
-        ExceptionGroup: If the files aren't valid PDDL, again as defined by the "pddl" module
-    """
-
+def strip_group(files: list[str]):
     domain_metadata = {}
     problems = {}
 
-    for file_path in files:
+    for file_path in tqdm.tqdm(files, desc="Parsing files and simplifying domains", ascii=" >="):
         try:
             domain = pddl.parse_domain(file_path)
         except Exception as domain_error:
@@ -368,7 +364,7 @@ def strip_group(files: list[Path]):
             else:
                 print(f"The domain at {file_path} uses unsupported requirements and so was not stripped")
 
-    for file_path, problem in problems.items():
+    for file_path, problem in tqdm.tqdm(problems.items(), desc="Simplifying problems", ascii=" >="):
         if problem.domain_name in domain_metadata:
             metadata = domain_metadata[problem.domain_name]
             strip_problem(problem, metadata)
@@ -384,6 +380,7 @@ def strip_group(files: list[Path]):
 
 @click.command()
 @click.argument("directory", type=click.STRING)
+@click.version_option("0.1.0")
 def cli(directory: str):
     files = glob.glob(os.path.join(directory, "**", "*.pddl"), recursive=True)
     strip_group(files)
