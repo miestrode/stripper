@@ -15,6 +15,9 @@ It should be noted that the CLI of Stripper doesn't work with domain-problem pai
 
 Instead Stripper simply accepts a directory and simplifies all of the files in that directory, making sure to match the right problem to the right domainm using the data in the files (making working with pairs again unneccessary).
 
+### NOTE:
+Stripper has a particular focus on correctness - not readability, or prettyness. Files generated should be machine readable and under the assumption the provided domains and problems are perfectly valid, never be erroneous. This means that the resulting files can sometimes look awkward, with names such as `truck_______`. This for example is done to make sure the name is actually unique and doesn't interefere with another name in the file.
+
 ## Requirements
 Stripper requires several modern Python features, such as pattern matching, and type hints. It was been successfully tested on Python 3.11.4, however your mileage may very. To use it, one must install `pddl`, `click` and `tqdm`.
 
