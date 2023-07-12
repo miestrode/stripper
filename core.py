@@ -159,16 +159,18 @@ def remove_equality_from_formula(
             return formula
 
 
-def remove_domain_equality_requirement(domain: Domain) -> name:
-    equality_predicate_name = uniquify("eq", get_max_predicate_length(domain))
-    domain.predicates.add(Predicate(equality_predicate_name, Variable("a"), Variable("b")))
+# TODO: Consider not registing the equality predicate later on if only the negation of it is used
+def remove_domain_equality_requirement(domain: Domain) -> name | None:
+    if Requirements.EQUALITY in domain.requirements:
+        equality_predicate_name = uniquify(EQUALITY_PREDICATE, get_max_predicate_length(domain))
+        domain.predicates.add(Predicate(equality_predicate_name, Variable("a"), Variable("b")))
 
-    for action in domain.actions:
-        action._precondition = remove_equality_from_formula(action.precondition, equality_predicate_name)
+        for action in domain.actions:
+            action._precondition = remove_equality_from_formula(action.precondition, equality_predicate_name)
 
-    domain._requirements -= {Requirements.EQUALITY}
+        domain._requirements -= {Requirements.EQUALITY}
 
-    return equality_predicate_name
+        return equality_predicate_name
 
 
 def remove_formula_constants(
@@ -264,7 +266,7 @@ def remove_domain_typing_requirement(domain: Domain) -> dict[name, name]:
 
 @dataclass
 class DomainMetadata:
-    equality_predicate: name
+    equality_predicate: name | None
     constant_types: dict[name, name]
     type_predicates: dict[name, name]
     negated_predicate_map: dict[name, tuple[name, int]]
@@ -299,8 +301,9 @@ def add_constants_to_problem(problem: Problem, constant_types: dict[name, name])
 
 
 def add_equality_predicate_to_problem(problem: Problem, equality_predicate: name):
-    for problem_object in problem.objects:
-        problem.init.add(Predicate(equality_predicate, problem_object, problem_object))
+    if equality_predicate:
+        for problem_object in problem.objects:
+            problem.init.add(Predicate(equality_predicate, problem_object, problem_object))
 
 
 def untype_problem(problem: Problem, type_predicates: dict[name, name]):
