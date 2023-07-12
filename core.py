@@ -6,7 +6,6 @@ from typing import Callable
 
 import click
 import pddl
-import tqdm
 from pddl import formatter, logic
 from pddl.custom_types import name
 from pddl.logic import Predicate
@@ -205,6 +204,8 @@ def remove_domain_constants(domain: Domain) -> dict[name, name]:
                     domain._types.add(constant_type)
 
                     constant_type_map[constant.name] = constant_type
+                else:
+                    constant_type = constant_type_map[constant.name]
 
                 constant_parameter = Variable(
                     uniquify(constant.name, max_parameter_length),
@@ -287,7 +288,14 @@ def make_problem_mutable(problem: Problem):
 
 def add_constants_to_problem(problem: Problem, constant_types: dict[name, name]):
     for constant_name, constant_type in constant_types.items():
-        problem.objects.add(Constant(constant_name, constant_type))
+        problem.objects.add(
+            Constant(
+                constant_name,
+                {
+                    constant_type,
+                },
+            )
+        )
 
 
 def add_equality_predicate_to_problem(problem: Problem, equality_predicate: name):
@@ -340,11 +348,21 @@ def strip_problem(problem: Problem, metadata: DomainMetadata):
     remove_problem_negative_preconditions(problem, metadata.negated_predicate_map)
 
 
+def standardise_file(file_path):
+    with open(file_path, "r") as file:
+        text = file.read().casefold()  # Apparently PDDL is case-insensitive
+
+    with open(file_path, "w") as file:
+        file.write(text)
+
+
 def strip_group(files: list[str]):
     domain_metadata = {}
     problems = {}
 
-    for file_path in tqdm.tqdm(files, desc="Parsing files and simplifying domains", ascii=" >="):
+    for file_path in files:
+        standardise_file(file_path)
+
         try:
             domain = pddl.parse_domain(file_path)
         except Exception as domain_error:
@@ -364,7 +382,7 @@ def strip_group(files: list[str]):
             else:
                 print(f"The domain at {file_path} uses unsupported requirements and so was not stripped")
 
-    for file_path, problem in tqdm.tqdm(problems.items(), desc="Simplifying problems", ascii=" >="):
+    for file_path, problem in problems.items():
         if problem.domain_name in domain_metadata:
             metadata = domain_metadata[problem.domain_name]
             strip_problem(problem, metadata)
