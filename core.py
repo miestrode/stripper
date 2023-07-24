@@ -32,7 +32,6 @@ SUPPORTED_REQUIREMENTS = {
 
 def make_domain_mutatable(domain: Domain):
     domain._predicates = set(domain._predicates)
-    domain._types = set(domain._types)
     domain._constants = set(domain._constants)
     domain._requirements = set(domain._requirements)
     domain._actions = set(domain._actions)
@@ -243,7 +242,20 @@ def untype_actions(domain: Domain, type_predicates: dict[name, name]):
             parameter._type_tags = set()
 
 
-def remove_domain_typing_requirement(domain: Domain) -> dict[name, name]:
+def supertypes(domain: Domain, object_type: name) -> set[name]:
+    types = set()
+
+    supertype = domain.types[object_type]
+
+    if supertype != "object":
+        types.add(supertype)
+        types.update(supertypes(domain, supertype))
+
+    return types
+
+
+# This returns both the type to predicate mapping and the type to supertypes mapping
+def remove_domain_typing_requirement(domain: Domain) -> tuple[dict[name, name], dict[name, set[name]]]:
     max_length = get_max_predicate_length(domain)
 
     def type_to_predicate(object_type) -> name:
@@ -253,15 +265,17 @@ def remove_domain_typing_requirement(domain: Domain) -> dict[name, name]:
 
         return new_name
 
+    supertype_map = {object_type: supertypes(domain, object_type) for object_type in domain.types}
     type_predicates = {object_type: type_to_predicate(object_type) for object_type in domain.types}
-    domain._types = set()
+    domain._types._types = {}
+    domain._types._all_types = {}
 
     remove_predicate_types(domain)
     untype_actions(domain, type_predicates)
 
     domain._requirements -= {Requirements.TYPING}
 
-    return type_predicates
+    return type_predicates, supertype_map
 
 
 @dataclass
@@ -269,6 +283,7 @@ class DomainMetadata:
     equality_predicate: name | None
     constant_types: dict[name, name]
     type_predicates: dict[name, name]
+    supertypes: dict[name, set[name]]
     negated_predicate_map: dict[name, tuple[name, int]]
 
 
@@ -277,10 +292,10 @@ def strip_domain(domain: Domain) -> DomainMetadata:
 
     equality_predicate = remove_domain_equality_requirement(domain)
     constants_types = remove_domain_constants(domain)
-    type_predicates = remove_domain_typing_requirement(domain)
+    type_predicates, supertypes = remove_domain_typing_requirement(domain)
     negated_predicate_map = remove_domain_negative_preconditions_requirement(domain)
 
-    return DomainMetadata(equality_predicate, constants_types, type_predicates, negated_predicate_map)
+    return DomainMetadata(equality_predicate, constants_types, type_predicates, supertypes, negated_predicate_map)
 
 
 def make_problem_mutable(problem: Problem):
@@ -306,17 +321,23 @@ def add_equality_predicate_to_problem(problem: Problem, equality_predicate: name
             problem.init.add(Predicate(equality_predicate, problem_object, problem_object))
 
 
-def untype_problem(problem: Problem, type_predicates: dict[name, name]):
+def untype_problem(problem: Problem, type_predicates: dict[name, name], supertypes: dict[name, set[name]]):
     for problem_object in problem.objects:
+        types = set()
+
         for type_tag in problem_object.type_tags:
-            problem.init.add(Predicate(type_predicates[type_tag], problem_object))
+            types.add(type_tag)
+            types.update(supertypes[type_tag])
+
+        for object_type in types:
+            problem.init.add(Predicate(type_predicates[object_type], problem_object))
 
         problem_object._type_tags = set()
 
 
-def combinations(group: list, length) -> list[list]:
+def combinations(group: list, length) -> list[tuple]:
     if length == 0:
-        return [[]]
+        return [()]
     elif len(group) == 0:
         return []
     else:
@@ -324,7 +345,7 @@ def combinations(group: list, length) -> list[list]:
 
         for item in group:
             for combination in combinations(group[1:], length - 1):
-                output.append([item] + combination)
+                output.append((item,) + combination)
 
         return output
 
@@ -337,6 +358,7 @@ def remove_problem_negative_preconditions(problem: Problem, negated_predicate_ma
 
     for predicate, negated_predicate_metadata in negated_predicate_map.items():
         negated_predicate, arity = negated_predicate_metadata
+
         for combination in combinations(list(problem.objects), arity):
             if combination not in truths[predicate]:
                 problem.init.add(Predicate(negated_predicate, *combination))
@@ -347,7 +369,7 @@ def strip_problem(problem: Problem, metadata: DomainMetadata):
 
     add_constants_to_problem(problem, metadata.constant_types)
     add_equality_predicate_to_problem(problem, metadata.equality_predicate)
-    untype_problem(problem, metadata.type_predicates)
+    untype_problem(problem, metadata.type_predicates, metadata.supertypes)
     remove_problem_negative_preconditions(problem, metadata.negated_predicate_map)
 
 
