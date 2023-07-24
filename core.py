@@ -322,9 +322,9 @@ def add_equality_predicate_to_problem(problem: Problem, equality_predicate: name
 
 def untype_problem(problem: Problem, type_predicates: dict[name, name], supertypes: dict[name, set[name]]):
     for problem_object in problem.objects:
-        types = set()
+        if problem_object.type_tag:
+            types = set()
 
-        for type_tag in problem_object.type_tag:
             problem.init.update(
                 set(
                     Predicate(type_predicates[object_type], problem_object)
@@ -332,10 +332,10 @@ def untype_problem(problem: Problem, type_predicates: dict[name, name], supertyp
                 )
             )
 
-        for object_type in types:
-            problem.init.add(Predicate(type_predicates[object_type], problem_object))
+            for object_type in types:
+                problem.init.add(Predicate(type_predicates[object_type], problem_object))
 
-        problem_object._type_tags = set()
+            problem_object._type_tags = set()
 
 
 def combinations(group: list, length) -> list[tuple]:
