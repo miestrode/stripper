@@ -202,7 +202,8 @@ def remove_domain_constants(domain: Domain) -> dict[name, name]:
             else:
                 if constant.name not in constant_type_map:
                     constant_type = uniquify(constant.name, max_type_length)
-                    domain._types.add(constant_type)
+                    domain._types._types[constant_type] = "object"
+                    domain._types._all_types.add(constant_type)
 
                     constant_type_map[constant.name] = constant_type
                 else:
@@ -247,7 +248,7 @@ def supertypes(domain: Domain, object_type: name) -> set[name]:
 
     supertype = domain.types[object_type]
 
-    if supertype != "object":
+    if supertype and supertype != "object":
         types.add(supertype)
         types.update(supertypes(domain, supertype))
 
@@ -308,9 +309,7 @@ def add_constants_to_problem(problem: Problem, constant_types: dict[name, name])
         problem.objects.add(
             Constant(
                 constant_name,
-                {
-                    constant_type,
-                },
+                constant_type,
             )
         )
 
@@ -325,9 +324,13 @@ def untype_problem(problem: Problem, type_predicates: dict[name, name], supertyp
     for problem_object in problem.objects:
         types = set()
 
-        for type_tag in problem_object.type_tags:
-            types.add(type_tag)
-            types.update(supertypes[type_tag])
+        for type_tag in problem_object.type_tag:
+            problem.init.update(
+                set(
+                    Predicate(type_predicates[object_type], problem_object)
+                    for object_type in supertypes[problem_object.type_tag] | {problem_object.type_tag}
+                )
+            )
 
         for object_type in types:
             problem.init.add(Predicate(type_predicates[object_type], problem_object))
