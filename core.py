@@ -2,11 +2,11 @@ import glob
 import os
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Callable
+from typing import Callable, Collection
 
 import click
 import pddl
-from pddl import formatter, logic
+from pddl import logic
 from pddl.custom_types import name
 from pddl.logic import Predicate
 from pddl.logic.base import And, BinaryOp, Not, Or, UnaryOp
@@ -28,6 +28,58 @@ SUPPORTED_REQUIREMENTS = {
     Requirements.EQUALITY,
     Requirements.CONDITIONAL_EFFECTS,
 }
+
+
+def remove_empty_lines(s: str) -> str:
+    """Remove empty lines from string."""
+    return "\n".join(filter(str.strip, s.splitlines()))
+
+
+def _sort_and_print_collection(prefix, collection: Collection, postfix, to_string: Callable = str):
+    if len(collection) > 0:
+        return prefix + " ".join(sorted(map(to_string, collection))) + postfix
+    else:
+        return ""
+
+
+def _print_predicates_with_types(predicates: Collection):
+    result = ""
+    for p in sorted(predicates):
+        if p.arity == 0:
+            result += f"({p.name})"
+        else:
+            result += f"({p.name}"
+            for t in p.terms:
+                result += f" ?{t.name} - {' '.join(t.type_tags)}" if t.type_tags else f" ?{t.name}"
+            result += ") "
+        result += " "
+    return result.strip()
+
+
+def _print_objects_with_types(objects: Collection):
+    result = ""
+    for o in sorted(objects):
+        result += f"{o.name} - {' '.join(o.type_tags)}" if o.type_tags else f"{o.name}"
+        result += " "
+    return result.strip()
+
+
+def domain_to_string(domain: Domain) -> str:
+    return (
+        f"(define (domain {domain.name})"
+        f"(:predicates {' '.join(str(predicate) for predicate in domain.predicates)})"
+        f"{' '.join(str(action) for action in domain.actions)})"
+    )
+
+
+def problem_to_string(problem: Problem) -> str:
+    return (
+        f"(define (problem {problem.name})"
+        f"(:domain {problem.domain_name})"
+        f"(:objects {' '.join(str(problem_object) for problem_object in problem.objects)})"
+        f"(:init {' '.join(str(predicate) for predicate in problem.init)})"
+        f"(:goal {str(problem.goal)}))"
+    )
 
 
 def make_domain_mutatable(domain: Domain):
@@ -167,7 +219,7 @@ def remove_domain_equality_requirement(domain: Domain) -> name | None:
         for action in domain.actions:
             action._precondition = remove_equality_from_formula(action.precondition, equality_predicate_name)
 
-        domain._requirements -= {Requirements.EQUALITY}
+        domain._requirements.discard(Requirements.EQUALITY)
 
         return equality_predicate_name
 
@@ -197,6 +249,9 @@ def remove_domain_constants(domain: Domain) -> dict[name, name]:
         constant_map = {}
 
         def register_constant(constant: Constant) -> name:
+            nonlocal constant_map
+            nonlocal constant_type_map
+
             if constant.name in constant_map:
                 return constant_map[constant.name]
             else:
@@ -268,13 +323,14 @@ def remove_domain_typing_requirement(domain: Domain) -> tuple[dict[name, name], 
 
     supertype_map = {object_type: supertypes(domain, object_type) for object_type in domain.types}
     type_predicates = {object_type: type_to_predicate(object_type) for object_type in domain.types}
+
     domain._types._types = {}
-    domain._types._all_types = {}
+    domain._types._all_types = set()
 
     remove_predicate_types(domain)
     untype_actions(domain, type_predicates)
 
-    domain._requirements -= {Requirements.TYPING}
+    domain._requirements.discard(Requirements.TYPING)
 
     return type_predicates, supertype_map
 
@@ -406,7 +462,7 @@ def strip_group(files: list[str]):
                 domain_metadata[domain.name] = strip_domain(domain)
 
                 with open(file_path, "w") as file:
-                    file.write(formatter.domain_to_string(domain))
+                    file.write(domain_to_string(domain))
             else:
                 print(f"The domain at {file_path} uses unsupported requirements and so was not stripped")
 
@@ -416,7 +472,7 @@ def strip_group(files: list[str]):
             strip_problem(problem, metadata)
 
             with open(file_path, "w") as file:
-                file.write(formatter.problem_to_string(problem))
+                file.write(problem_to_string(problem))
         else:
             print(
                 f"The problem in {file_path} uses a domain with unsupported requirement "
